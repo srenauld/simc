@@ -5037,7 +5037,7 @@ std::string demon_hunter_t::default_flask() const
 
 std::string demon_hunter_t::default_potion() const
 {
-  return (true_level > 110) ? (specialization() == DEMON_HUNTER_HAVOC ? "potion_of_unbridled_fury" : "steelskin_potion") :
+  return (true_level > 110) ? "potion_of_unbridled_fury" :
          (true_level > 100) ? (specialization() == DEMON_HUNTER_HAVOC ? "prolonged_power" : "unbending_potion") :
          (true_level >= 90) ? (specialization() == DEMON_HUNTER_HAVOC ? "draenic_agility" : "draenic_versatility") :
          (true_level >= 85) ? "virmens_bite" :
@@ -5230,7 +5230,7 @@ void demon_hunter_t::apl_vengeance()
   apl_brand->add_action( this, "Sigil of Flame", "if=dot.fiery_brand.ticking" );
 
   action_priority_list_t* apl_normal = get_action_priority_list( "normal", "Normal Rotation" );
-  apl_normal->add_action( this, "Infernal Strike" );
+  apl_normal->add_action( this, "Infernal Strike" , "if=(!talent.flame_crash.enabled|(dot.sigil_of_flame.remains<3&!action.infernal_strike.sigil_placed))");
   apl_normal->add_talent( this, "Spirit Bomb", "if=((buff.metamorphosis.up&soul_fragments>=3)|soul_fragments>=4)" );
   apl_normal->add_action( this, "Soul Cleave", "if=(!talent.spirit_bomb.enabled&((buff.metamorphosis.up&soul_fragments>=3)|soul_fragments>=4))" );
   apl_normal->add_action( this, "Soul Cleave", "if=talent.spirit_bomb.enabled&soul_fragments=0" );
@@ -5238,7 +5238,8 @@ void demon_hunter_t::apl_vengeance()
   apl_normal->add_talent( this, "Felblade", "if=pain<=70" );
   apl_normal->add_talent( this, "Fracture", "if=soul_fragments<=3" );
   apl_normal->add_talent( this, "Fel Devastation" );
-  apl_normal->add_action( this, "Sigil of Flame" );
+  apl_normal->add_action( this, "Sigil of Flame", "if=(dot.sigil_of_flame.remains<3&!action.infernal_strike.sigil_placed)");
+  apl_normal->add_action( this, "Fiery Brand");
   apl_normal->add_action( this, "Shear" );
   apl_normal->add_action( this, "Throw Glaive" );
 }

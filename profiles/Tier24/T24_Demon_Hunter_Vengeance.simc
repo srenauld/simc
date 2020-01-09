@@ -9,7 +9,7 @@ position=front
 talents=1213121
 
 # Default consumables
-potion=steelskin_potion
+potion=potion_of_unbridled_fury
 flask=greater_flask_of_the_currents
 food=famine_evaluator_and_snack_table
 augmentation=battle_scarred
@@ -60,18 +60,18 @@ actions.cooldowns+=/use_items
 # Defensives
 actions.defensives=demon_spikes
 actions.defensives+=/metamorphosis
-actions.defensives+=/fiery_brand
 
 # Normal Rotation
-actions.normal=infernal_strike
-actions.normal+=/spirit_bomb,if=soul_fragments>=4
-actions.normal+=/soul_cleave,if=!talent.spirit_bomb.enabled
+actions.normal=infernal_strike,if=(!talent.flame_crash.enabled|(dot.sigil_of_flame.remains<3&!action.infernal_strike.sigil_placed))
+actions.normal+=/spirit_bomb,if=((buff.metamorphosis.up&soul_fragments>=3)|soul_fragments>=4)
+actions.normal+=/soul_cleave,if=(!talent.spirit_bomb.enabled&((buff.metamorphosis.up&soul_fragments>=3)|soul_fragments>=4))
 actions.normal+=/soul_cleave,if=talent.spirit_bomb.enabled&soul_fragments=0
 actions.normal+=/immolation_aura,if=pain<=90
 actions.normal+=/felblade,if=pain<=70
 actions.normal+=/fracture,if=soul_fragments<=3
 actions.normal+=/fel_devastation
-actions.normal+=/sigil_of_flame
+actions.normal+=/sigil_of_flame,if=(dot.sigil_of_flame.remains<3&!action.infernal_strike.sigil_placed)
+actions.normal+=/fiery_brand
 actions.normal+=/shear
 actions.normal+=/throw_glaive
 
