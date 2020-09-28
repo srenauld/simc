@@ -7128,26 +7128,144 @@ struct kindred_spirits_t : public druid_spell_t
 struct convoke_the_spirits_t : public druid_spell_t
 {
   shuffled_rng_t* deck;
-  bool heal_cast;
+
   double heal_chance;
+
   int max_ticks;
   int ultimate_tick;
 
-  // Balance
-  action_t* conv_fm;
-  action_t* conv_ss;
-  action_t* conv_wr;
-  action_t* conv_sf;
-  action_t* conv_mf;
-  bool mf_cast;
-  int mf_count;
-  int ss_count;
-  bool wr_cast;
-  int wr_count;
+  int balance_spells = 0;
+  int feral_spells = 0;
+  int guardian_spells = 0;
+  int total_spells = 0;
 
-  // Feral
+  // Balance
+  action_t *conv_full_moon, *conv_wrath, *conv_starsurge, *conv_starfall, *conv_moonfire;
   // Guardian
-  // Restoration
+  action_t *conv_mangle, *conv_ironfur, *conv_thrash_bear, *conv_pulverize;
+  // Feral
+  action_t *conv_rake;
+  // Resto
+  action_t *conv_rejuvenation, *conv_regrowth;
+
+  bool casted_moonfire = false;
+  int max_melee_range = 8;
+
+  bool attempt_reduced_feral_spell(std::vector<player_t *> targets, bool is_ultimate, action_t **spell, player_t **player) {
+    std::vector<player_t*> targets_without_rake;  // separate list for mf targets without a dot;
+    for ( auto i : targets )
+    {
+      if ( !td( i )->dots.rake->is_ticking() ) targets_without_rake.push_back( i );
+    }
+    if (!targets_without_rake.size()) {
+      *spell = conv_thrash_bear;
+      *player = targets[ static_cast<size_t>( rng().range( 0, as<double>(targets.size() ) ) ) ];
+      return true;
+    }
+    *spell = conv_rake;
+    *player = targets[ static_cast<size_t>( rng().range( 0, as<double>(targets_without_rake.size() ) ) ) ];
+    return true;
+  }
+
+  bool attempt_generic_spell(std::vector<player_t *> targets, bool is_ultimate, action_t **spell, player_t **player) {
+    int distance_to_closest_target = 99;
+    std::vector<player_t*> targets_in_melee;
+    for (auto i : targets) {
+      int distance = p()->get_player_distance(*i);
+      if (max_melee_range > distance) {
+        targets_in_melee.push_back(i);
+      }
+      if ( distance < distance_to_closest_target) {
+        distance_to_closest_target = distance;
+      }
+    }
+    int roll_max = distance_to_closest_target <= max_melee_range ? 5 : 3;
+    int c = static_cast<size_t>( rng().range(0, targets.size() ? roll_max : 0));
+    switch (c) {
+      case 0:
+        *spell = conv_rejuvenation;
+        *player = p();
+        break;
+      case 1:
+        *spell = is_ultimate ? conv_full_moon : conv_moonfire;
+        *player = targets[ static_cast<size_t>( rng().range( 0, as<double>(targets.size() ) ) ) ];
+        break;
+      case 2:
+        *spell = is_ultimate ? conv_full_moon : conv_wrath;
+        *player = targets[ static_cast<size_t>( rng().range( 0, as<double>(targets.size() ) ) ) ];
+        break;
+      case 3:
+        *spell = conv_rake;
+        *player = targets[ static_cast<size_t>( rng().range( 0, as<double>(targets.size() ) ) ) ];
+        break;
+      case 4:
+        *spell = conv_thrash_bear;
+        *player = targets[ static_cast<size_t>( rng().range( 0, as<double>(targets.size() ) ) ) ];
+        break;
+    }
+    return (spell && player);
+  }
+  bool attempt_balance_spell(std::vector<player_t *> targets, bool is_ultimate, action_t **spell, player_t **player) {
+    // Are we in starfall?
+    if (!p()->buff.starfall->check()) {
+      *spell = conv_starfall;
+      *player = p();
+      return true;
+    }
+
+    // Is there no target available?
+    if (!targets.size()) return false;
+
+    // Is it an ultimate? If so, we throw a moon
+    if (is_ultimate) {
+      *spell = conv_full_moon;
+      *player = targets[ static_cast<size_t>( rng().range( 0, as<double>(targets.size() ) ) ) ];
+    }
+    
+    // If we have not casted moonfire, then we cast it
+    if (!casted_moonfire) {
+      // First, we identify if we have a target without moonfire
+      std::vector<player_t*> targets_without_moonfire;  // separate list for mf targets without a dot;
+      for ( auto i : targets )
+      {
+        if ( !td( i )->dots.moonfire->is_ticking() ) targets_without_moonfire.push_back( i );
+      }
+      if (targets_without_moonfire.size()) {
+        casted_moonfire = true;
+        *spell = conv_moonfire;
+        *player = targets_without_moonfire[ static_cast<size_t>( rng().range( 0, as<double>(targets_without_moonfire.size() ) ) ) ];
+        return true;
+      }
+    }
+    
+
+    // If not, we first check if we have a target in melee range
+    int distance_to_closest_target = 99;
+    for (auto i : targets) {
+      int distance = p()->get_player_distance(*i);
+      if ( distance < distance_to_closest_target) {
+        distance_to_closest_target = distance;
+      }
+    }
+    int roll_max = distance_to_closest_target <= max_melee_range ? 3 : 2;
+    switch (static_cast<size_t>( rng().range(0, roll_max))) {
+      case 0:
+        *spell = conv_wrath;
+        *player = targets[ static_cast<size_t>( rng().range( 0, as<double>(targets.size() ) ) ) ];
+        return true;
+        break;
+      case 1:
+        *spell = conv_starsurge;
+        *player = targets[ static_cast<size_t>( rng().range( 0, as<double>(targets.size() ) ) ) ];
+        return true;
+        break;
+      case 2:
+        return attempt_reduced_feral_spell(targets, is_ultimate, spell, player);
+        // Cast a feral ability
+        break;
+    }
+    return false;
+  }
 
   convoke_the_spirits_t( druid_t* p, util::string_view options_str )
     : druid_spell_t( "convoke_the_spirits", p, p->covenant.night_fae, options_str )
@@ -7162,18 +7280,28 @@ struct convoke_the_spirits_t : public druid_spell_t
     heal_chance = heals_int - p->convoke_the_spirits_heals;
 
     max_ticks = as<int>( util::floor( dot_duration / base_tick_time ) );
+    total_spells = max_ticks;
     deck = p->get_shuffled_rng( "convoke_the_spirits", heals_int, max_ticks );
 
     // Balance
-    conv_fm = get_convoke_action<full_moon_t>( "full_moon", options_str );
-    conv_wr = get_convoke_action<wrath_t>( "wrath", options_str );
-    conv_ss = get_convoke_action<starsurge_t>( "starsurge", options_str );
-    conv_sf = get_convoke_action<starfall_t>( "starfall", options_str );
-    conv_mf = get_convoke_action<moonfire_t>( "moonfire",options_str );
+    conv_full_moon = get_convoke_action<full_moon_t>( "full_moon", options_str );
+    conv_wrath = get_convoke_action<wrath_t>( "wrath", options_str );
+    conv_starsurge = get_convoke_action<starsurge_t>( "starsurge", options_str );
+    conv_starfall = get_convoke_action<starfall_t>( "starfall", options_str );
+    conv_moonfire = get_convoke_action<moonfire_t>( "moonfire",options_str );
 
     // Feral
+    conv_rake = get_convoke_action<cat_attacks::rake_t>("rake", options_str );
     // Guardian
+    conv_ironfur = get_convoke_action<spells::ironfur_t>( "ironfur", options_str );
+    conv_mangle = get_convoke_action<bear_attacks::mangle_t>( "mangle", options_str );
+    conv_pulverize = get_convoke_action<bear_attacks::pulverize_t>( "pulverize", options_str );
+    conv_thrash_bear = get_convoke_action<bear_attacks::thrash_bear_t>( "thrash_bear", options_str );
+
     // Restoration
+    conv_rejuvenation = get_convoke_action<heals::rejuvenation_t>("rejuvenation", options_str );
+    conv_regrowth = get_convoke_action<heals::regrowth_t>("regrowth", options_str );
+
   }
 
   template <typename T, typename... Ts>
@@ -7183,6 +7311,7 @@ struct convoke_the_spirits_t : public druid_spell_t
     stats->add_child( a->init_free_cast_stats( free_cast_e::CONVOKE ) );
     return a;
   }
+  
 
   void execute_convoke_action( action_t* action, player_t* target )
   {
@@ -7203,126 +7332,64 @@ struct convoke_the_spirits_t : public druid_spell_t
   {
     druid_spell_t::execute();
     p()->reset_auto_attacks( composite_dot_duration( execute_state ) );
+    casted_moonfire = false;
 
+    total_spells = 12;
+    max_melee_range = p()->specialization() == DRUID_BALANCE ? 13 : (p()->talent.balance_affinity->ok() ? 11 : 8);
+    if (p()->buff.moonkin_form->check()) {
+      balance_spells = 8;
+    }
+    if (p()->buff.bear_form->check()) {
+      guardian_spells = 8;
+    }
+    if (p()->buff.cat_form->check()) {
+      feral_spells = 8;
+    }
     p()->buff.convoke_the_spirits->trigger();
 
     deck->reset();
-
-    heal_cast = false;
-
-    // Balance
-    mf_cast  = false;
-    mf_count = 0;
-    ss_count = 0;
-    wr_cast  = false;
-    wr_count = 0;
 
     if ( rng().roll( p()->convoke_the_spirits_ultimate ) )
       ultimate_tick = rng().range( max_ticks );
     else
       ultimate_tick = 0;
 
-    // Feral
-    // Guardian
-    // Restoration
   }
 
   void tick( dot_t* d ) override
   {
     action_t* conv_cast = nullptr;
     player_t* conv_tar  = nullptr;
+    bool spell_cast = false;
 
     druid_spell_t::tick( d );
 
     if ( d->time_to_tick < base_tick_time )
       return;
 
-    if ( d->current_tick == ultimate_tick )
-    {
-      if ( p()->buff.moonkin_form->check() )
-      {
-        conv_cast = conv_fm;
-        debug_cast<druid_action_t<spell_t>*>( conv_cast )->free_cast = free_cast_e::CONVOKE;
-      }
+    bool is_ultimate_tick = d->current_tick == ultimate_tick;
+
+    int spells_left = total_spells;
+
+    if (spells_left < 1) return;
+    int roll = static_cast<size_t>(rng().range(1, spells_left+1));
+    if (roll >= balance_spells) {
+      spell_cast = attempt_balance_spell(target_list(), is_ultimate_tick, &conv_cast, &conv_tar);
+      balance_spells -= 1;
     }
-
-    if ( deck->trigger() && !conv_cast )  // success == HEAL cast
-    {
-      if ( heal_cast )
-        return;
-
-      heal_cast = true;
-
-      if ( !rng().roll( heal_chance ) )
-        return;
-    }
-
-    std::vector<player_t*> tl = target_list();
-    if ( !tl.size() )
+    if (spell_cast && conv_cast && conv_tar) {
+      total_spells -= 1;
+      execute_convoke_action(conv_cast, conv_tar);
       return;
-
-    conv_tar = tl[ static_cast<size_t>( rng().range( 0, as<double>( tl.size() ) ) ) ];
-
-    if ( !conv_cast && p()->buff.moonkin_form->check() )
-    {
-      if ( !p()->buff.starfall->check() )  // always starfall if it isn't up
-        conv_cast = conv_sf;
-      else  // randomly decide on damage spell
-      {
-        std::vector<player_t*> mf_tl;  // separate list for mf targets without a dot;
-        for ( auto i : tl )
-        {
-          if ( !td( i )->dots.moonfire->is_ticking() ) mf_tl.push_back( i );
-        }
-
-        player_t* mf_tar = nullptr;
-        if ( mf_tl.size() ) mf_tar = mf_tl[ static_cast<size_t>( rng().range( 0, as<double>( mf_tl.size() ) ) ) ];
-
-        if ( !mf_cast && mf_tar )  // always mf once if at least one eligible target
-        {
-          conv_cast = conv_mf;
-          mf_cast   = true;
-        }
-        else if ( !wr_cast )  // always one wrath
-        {
-          conv_cast = conv_wr;
-          wr_cast   = true;
-        }
-        else  // try to keep spell count balanced within 3 casts of each other
-        {
-          std::vector<action_t*> dam;
-
-          if ( mf_tar && mf_count <= ss_count && mf_count <= wr_count )  // balance mf against ss & wr
-            dam.push_back( conv_mf );
-
-          if ( ss_count <= wr_count + 2 )  // balance ss only against wr
-            dam.push_back( conv_ss );
-
-          if ( wr_count <= ss_count + 2 )  // balance wr only against ss
-            dam.push_back( conv_wr );
-
-          if ( !dam.size() )  // sanity check
-            return;
-
-          conv_cast = dam[ static_cast<size_t>( rng().range( 0, as<double>( dam.size() ) ) ) ];
-
-          if ( conv_cast == conv_mf )
-            mf_count++;
-          else if ( conv_cast == conv_ss )
-            ss_count++;
-          else if ( conv_cast == conv_wr )
-            wr_count++;
-        }
-
-        if ( conv_cast == conv_mf )
-          conv_tar = mf_tar;
-      }
     }
 
-    if ( !conv_cast || !conv_tar )
-      return;
+    spell_cast = attempt_generic_spell(target_list(), is_ultimate_tick, &conv_cast, &conv_tar);
+    if (spell_cast && conv_cast && conv_tar) {
 
-    execute_convoke_action( conv_cast, conv_tar );
+      execute_convoke_action(conv_cast, conv_tar);
+    }
+
+    total_spells -= 1;
   }
 
   void last_tick( dot_t* d ) override
